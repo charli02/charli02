@@ -13,3 +13,33 @@ Here are some ideas to get you started:
 - 😄 Pronouns: ...
 - ⚡ Fun fact: ...
 
+ public ActionResult CreateFileName()
+        {
+            string newFileName = Guid.NewGuid().ToString();
+            return Json(new { data = newFileName });
+        }
+        
+        -----------------------------------------------------
+         function DownloadInvoice(InvoiceUID, BatchID) {
+        ShowLoader();
+        $.ajax({
+            url: '@Url.Action("CreateFileName", "Operations")',
+            type: 'POST',
+            data: {},
+            success: function (result) {
+                $.ajax({
+                    url: '@Url.Action("generateBillingInvoicePdf", "Billing")',
+                    type: 'POST',
+                    data: { FileName: result.data, BillingBatchUID: null, BillingBatchID: BatchID, InvoiceUID: InvoiceUID },
+                    success: function (result1) {
+                        HideLoader();
+                        window.open("/Resources/Downloads/" + result.data + ".pdf", '_blank');
+                    }
+                });
+            }
+        });
+    }
+    
+    ----------------------------------------------------------
+    
+    
