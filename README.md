@@ -12,161 +12,320 @@ Here are some ideas to get you started:
 - 📫 How to reach me: ...
 - 😄 Pronouns: ...
 - ⚡ Fun fact: ...
-//Rotativa 
- public ActionResult CreateFileName()
+public abstract class RepositoryBase<TEntity, TContext> :
+        IRepository<TEntity> where TEntity : class
+                                where TContext : DbContext, new()
+    {
+
+        private TContext _context;// = new TContext();
+        public TContext Context
         {
-            string newFileName = Guid.NewGuid().ToString();
-            return Json(new { data = newFileName });
+            get { return _context; }
+            set { _context = value; }
         }
-        
-        -----------------------------------------------------
-         function DownloadInvoice(InvoiceUID, BatchID) {
-        ShowLoader();
-        $.ajax({
-            url: '@Url.Action("CreateFileName", "Operations")',
-            type: 'POST',
-            data: {},
-            success: function (result) {
-                $.ajax({
-                    url: '@Url.Action("generateBillingInvoicePdf", "Billing")',
-                    type: 'POST',
-                    data: { FileName: result.data, BillingBatchUID: null, BillingBatchID: BatchID, InvoiceUID: InvoiceUID },
-                    success: function (result1) {
-                        HideLoader();
-                        window.open("/Resources/Downloads/" + result.data + ".pdf", '_blank');
-                    }
-                });
-            }
-        });
+
+        // not needed, just keeping it, will delete later
+        protected DbSet<TEntity> _DbSet { get; set; }
+
+        public RepositoryBase()
+        {
+        }
+
+        public RepositoryBase(TContext context)
+        {
+            _context = context;
+            _DbSet = _context.Set<TEntity>();
+        }
+
+        //public List<TEntity> GetAll()
+        //{
+        //    if (_DbSet.Count() > 0)
+        //        return _DbSet.ToList();
+
+        //    return new List<TEntity>();
+        //}
+
+        public IEnumerable<TEntity> GetAll()
+        {
+            IEnumerable<TEntity> query = _context.Set<TEntity>();
+            return query;
+        }
+
+        public IEnumerable<TEntity> FindBy(Expression<Func<TEntity, bool>> predicate)
+        {
+            IEnumerable<TEntity> query = _context.Set<TEntity>().Where(predicate);
+            return query;
+        }
+
+        public TEntity Get(Guid id)
+        {
+            return _DbSet.Find(id);
+        }
+
+        //3. Mark entity as modified
+        public void MarkModified(TEntity entity)
+        {
+            _context.Entry<TEntity>(entity).State = EntityState.Modified;
+        }
+
+        public void Add(TEntity entity)
+        {
+            _context.Set<TEntity>().Add(entity);
+            //_DbSet.Add(entity);
+        }
+
+        // Update/Save Entity in database
+        public void Edit(TEntity entity)
+        {
+            _context.Entry<TEntity>(entity).State = EntityState.Modified;
+        }
+
+        public void Delete(int id)
+        {
+            var entity = _context.Set<TEntity>().Find(id);
+            if (entity != null)
+                _context.Set<TEntity>().Remove(entity);
+
+            //_DbSet.Remove(entity);
+        }
+
+        public void Delete(TEntity entity)
+        {
+            _context.Set<TEntity>().Remove(entity);
+            //_DbSet.Remove(entity);
+        }
+
+        public void Save()
+        {
+            _context.SaveChanges();
+        }
+
+        public void AddRange(IEnumerable<TEntity> entities)
+        {
+            _context.Set<TEntity>().AddRange(entities);
+        }
+
+        public void DeleteRange(IEnumerable<TEntity> entities)
+        {
+            _context.Set<TEntity>().RemoveRange(entities);
+        }
+
+        public void EditRange(IEnumerable<TEntity> entities)
+        {
+            foreach (TEntity entity in entities)
+                _context.Entry<TEntity>(entity).State = EntityState.Modified;
+        }
+
+        public int GetCount()
+        {
+            return _DbSet.Count();
+        }
+
+        public int GetCount(Expression<Func<TEntity, bool>> predicate)
+        {
+            return _DbSet.Count(predicate);
+        }
+
+        //public virtual List<TEntity> GetWithRawSql(string query, params object[] parameters)
+        //{
+        //    return _DbSet.SqlQuery(query, parameters).ToList();
+        //}
     }
     
-    ----------------------------------------------------------
+    ------------------------------------------------------------------------------------------------------
     
-    #region download invoice
+    public interface IRepository<TEntity> where TEntity : class
+    {
+        TEntity Get(Guid id);
+        IEnumerable<TEntity> GetAll();
+        IEnumerable<TEntity> FindBy(Expression<Func<TEntity, bool>> predicate);
 
-        [ActionDownload]
-        public ActionResult generateBillingInvoicePdf(string fileName, string BillingBatchUID, string BillingBatchID, string InvoiceUID, string DocSize, string InvoiceType)
+        int GetCount();
+        int GetCount(Expression<Func<TEntity, bool>> predicate);
+
+        void MarkModified(TEntity entity);
+        void Add(TEntity entity);
+        void AddRange(IEnumerable<TEntity> entities);
+
+        void Delete(int id);
+        void Delete(TEntity entity);
+        void DeleteRange(IEnumerable<TEntity> entities);
+
+        void Edit(TEntity entity);
+        void EditRange(IEnumerable<TEntity> entities);
+
+        void Save();
+
+        // List<TEntity> GetWithRawSql(string query, params object[] parameters);
+    }
+    
+    
+    ------------------------------------------------------------------------------------------------------
+    public class DesignationHierarchyRepository : RepositoryBase<DesignationHierarchy, XLMSDbContext>, IDesignationHierarchyRepository
+    {
+        //private XLMSDbContext _context;
+
+        public DesignationHierarchyRepository(XLMSDbContext context) : base(context)
         {
+            //_context = context;
+        }
+
+    }
+
+------------------------------------------------------------------------------------------------------
+
+public interface IDesignationHierarchyRepository : IRepository<DesignationHierarchy>
+    {
+    }
+ ------------------------------------------------------------------------------------------------------
+ public class DesignationHierarchyService : IDesignationHierarchyService
+    {
+        private readonly IDesignationHierarchyRepository _designationHierarchyRepository;
+        private readonly IDesignationService _designationService;
+
+        public DesignationHierarchyService(IDesignationHierarchyRepository designationHierarchyRepository, IDesignationService designationService)
+        {
+            _designationHierarchyRepository = designationHierarchyRepository;
+            _designationService = designationService;
+        }
+        public bool ResetDesignationHierarchies(IList<DesignationHierarchy> designationHierarchies)
+        {
+            var oldDesignationHierarchies = _designationHierarchyRepository.GetAll().ToList();
+            _designationHierarchyRepository.DeleteRange(oldDesignationHierarchies);
+            _designationHierarchyRepository.AddRange(designationHierarchies);
+            _designationHierarchyRepository.Save();
+            return true;
+        }
+
+       
+
+    }
+ ------------------------------------------------------------------------------------------------------
+ public class PagedResponse<T> : ApiResponse<T>
+    {
+        public int PageNumber { get; set; }
+        public int PageSize { get; set; }
+
+        public PagedResponse(IEnumerable<T> data, int pageNumber, int pageSize, string message, bool succeeded, Enums.HttpStatusCode responseCode)
+        {
+            this.PageNumber = pageNumber;
+            this.PageSize = pageSize;
+            this.Data = data;
+            this.Message = message;
+            this.Succeeded = succeeded;
+            this.ResponseCode = responseCode;
+        }
+
+        public static PagedResponse<T> PagedList(IEnumerable<T> source, string message, bool succeeded, Enums.HttpStatusCode responseCode, int pageNumber = 0, int pageSize = 0)
+        {
+            if (pageNumber > 0 && pageSize > 0)
+            {
+                var data = source.Skip((pageNumber - 1) * pageSize).Take(pageSize);
+                return new PagedResponse<T>(data, pageNumber, pageSize, message, succeeded, responseCode);
+            }
+
+            return new PagedResponse<T>(source, pageNumber, pageSize, message, succeeded, responseCode);
+        }
+    }
+    
+    ------------------------------------------------------------------------------------------------------
+    public class PaginationFilter
+    {
+        public int PageNumber { get; set; }
+        public int PageSize { get; set; }
+        public int GetActiveUsrs { get; set; }
+        public string QuerySearch {get; set;}
+        public int GetActiveGroups { get; set; }
+        public int GetInActiveGroups { get; set; }
+        public int GetActiveLocations { get; set; }
+        //public int GetIsDeleted { get; set; }
+        
+        public PaginationFilter()
+        {
+            this.PageNumber = 1;
+            this.PageSize = 5;
+            this.QuerySearch = "";
+            this.GetActiveUsrs = 1;
+        }
+        public PaginationFilter(int pageNumber, int pageSize)
+        {
+            this.PageNumber = pageNumber < 1 ? 1 : pageNumber;
+            this.PageSize = pageSize > 5 ? 5 : pageSize;
+        }
+
+        //public PaginationFilter(int pageNumber, int pageSize, string QuerySearch)
+        //{
+        //    this.PageNumber = pageNumber < 1 ? 1 : pageNumber;
+        //    this.PageSize = pageSize > 5 ? 5 : pageSize;
+        //    this.QuerySearch = string.IsNullOrEmpty(QuerySearch) == true ? "" : QuerySearch;
+        //}
+
+        public PaginationFilter(int pageNumber, int pageSize, int GetActiveUsrs ,string QuerySearch)
+        {
+            this.PageNumber = pageNumber < 1 ? 1 : pageNumber;
+            this.PageSize = pageSize > 5 ? 5 : pageSize;
+            this.GetActiveUsrs = GetActiveUsrs == 1 ? 1 : GetActiveUsrs;
+            this.QuerySearch = string.IsNullOrEmpty(QuerySearch) == true ? "" : QuerySearch;
+            
+        }
+    }
+ ------------------------------------------------------------------------------------------------------
+ [HttpGet]
+        [Route(Constants.Attrributes.ListApiName)]
+        public PagedResponse<ResultUser> GetUsers([FromQuery] PaginationFilter filter)
+        {
+            //ELIMINATE USERS WHOSE PROFILE ARE NULL 
+            IEnumerable<ResultUser> users = _userService.GetUsers().Where(x => x.UserProfile != null).OrderByDescending(x => x.UserProfile.ModifiedOn != null ? x.UserProfile.ModifiedOn : x.UserProfile.CreatedOn);
+
             try
             {
-                #region Pdf
-
-                string FileName = fileName + ".pdf";
-                string path = Path.Combine(System.Web.Hosting.HostingEnvironment.ApplicationPhysicalPath + "/Resources/Downloads/");
-                string savepath = path + FileName;
-
-                DateTime currentDate = CommonFunction.fnDateTimeLocalWithUTC;
-                string onlyDate = CommonFunction.ConvertDateToStringWithoutOffset(currentDate);//currentDate.ToString("MM/dd/yyyy").Replace("-", "/").Replace("-", "/");
-                TimeSpan timeSpan = new TimeSpan(currentDate.TimeOfDay.Hours, currentDate.TimeOfDay.Minutes, 00);
-                string onlyTime = new DateTime().Add(timeSpan).ToString("hh:mm tt");
-
-                string userName = Session["LoginUserName"].ToString();
-
-                string footer = "--footer-right \" Page: [page] of [toPage]\" " + "--footer-left \"Batch: " + BillingBatchID + "\" --footer-center \"Generated by " + userName + " on " + onlyDate + " at " + onlyTime + " \" --footer-font-size \"9\" --footer-spacing 5 --footer-font-name \"open sans\"";
-
-                Rotativa.Core.DriverOptions footerItem = new Rotativa.Core.DriverOptions();
-                footerItem.CustomSwitches = footer;
-                if (DocSize != null)
+                if (users != null && users.Count() > 0)
                 {
-                    if (DocSize == "A4")
+                    //CHECK FOR ACTIVE AND ALL USERS BESED ON PAGINATION PARAMETER
+                    if (filter.GetActiveUsrs == 1)
+                        users = users.Where(x => x.IsActive);
+                    if (filter.GetActiveUsrs == 2)
+                        users = users.Where(x => !(x.IsActive));
+
+                    //FUNCTION FOR SEARCH USER BY FULLNAME OR EMAIL
+                    //Search Parameter [With null check]  
+                    if (!string.IsNullOrEmpty(filter.QuerySearch))
                     {
-                        footerItem.PageSize = Rotativa.Core.Options.Size.A4;
+                        filter.QuerySearch = filter.QuerySearch.ToLower();
+                        users = users.Where(a => (a.UserName.ToLower().Contains(filter.QuerySearch) || String.Format("{0} {1}", a.UserProfile == null ? "" : a.UserProfile.FirstName, a.UserProfile == null ? "" : a.UserProfile.LastName).ToLower().Contains(filter.QuerySearch)));
+
                     }
-                    else if (DocSize == "Letter")
-                    {
-                        footerItem.PageSize = Rotativa.Core.Options.Size.Letter;
-                    }
-                    else
-                    {
-                        footerItem.PageSize = Rotativa.Core.Options.Size.Letter;
-                    }
+                    response = Constants.ApiRequestResponse.ResponseSuccess;
+                    _commonService.ApiRequestLogInDb(Request.Path.Value, response, getUserEmail(), CommonFunction.returnJsontoString(filter), ErrMsg);
+                    return PagedResponse<ResultUser>.PagedList(
+                        users,
+                        Constants.Messages.Success,
+                        true,
+                        Enums.HttpStatusCode.OK,
+                        filter.PageNumber,
+                        filter.PageSize);
                 }
                 else
                 {
-                    footerItem.PageSize = Rotativa.Core.Options.Size.Letter;
+                    ErrMsg = Constants.Messages.NotDataExistsInTable;
+                    _commonService.ApiRequestLogInDb(Request.Path.Value, response, getUserEmail(), CommonFunction.returnJsontoString(filter), ErrMsg);
+                    return PagedResponse<ResultUser>.PagedList(
+                        users,
+                        Constants.Messages.NotDataExistsInTable,
+                        true,
+                        Enums.HttpStatusCode.OK,
+                        filter.PageNumber,
+                        filter.PageSize);
                 }
-
-                ActionAsPdf pdf = new ActionAsPdf("billingInvoiceTemplate1Pdf", new { BillingBatchUID = BillingBatchUID, CompanyID = CommonFunction.sCompanyID, DateFormatId = Convert.ToInt16("0" + Session["cDateFormatId"]), InvoiceUID = InvoiceUID, InvoiceType = InvoiceType })
-                {
-                    FileName = FileName,
-#pragma warning disable CS0618 // 'AsPdfResultBase.SaveOnServerPath' is obsolete: 'Use BuildPdf(this.ControllerContext) method instead and use the resulting binary data to do what needed.'
-                    SaveOnServerPath = savepath,
-#pragma warning restore CS0618 // 'AsPdfResultBase.SaveOnServerPath' is obsolete: 'Use BuildPdf(this.ControllerContext) method instead and use the resulting binary data to do what needed.'
-                    RotativaOptions = footerItem
-                };
-                return pdf;
-                #endregion
             }
-#pragma warning disable CS0168 // The variable 'ex' is declared but never used
             catch (Exception ex)
-#pragma warning restore CS0168 // The variable 'ex' is declared but never used
-
             {
+                return PagedResponse<ResultUser>.PagedList(
+                    users,
+                    Constants.Messages.Failed,
+                    false,
+                    Enums.HttpStatusCode.InternalServerError,
+                    filter.PageNumber,
+                    filter.PageSize);
             }
-
-            return Json(new { data = 1 });
         }
-
-        public ActionResult billingInvoiceTemplate1Pdf(string BillingBatchUID, string CompanyID, int DateFormatId, string InvoiceUID, string InvoiceType)
-        {
-            if (InvoiceUID == null)
-            {
-                InvoiceUID = "";
-            }
-            if (BillingBatchUID == null)
-            {
-                BillingBatchUID = "";
-            }
-            var model = new InvoiceTemplateReportModel();
-            model.DateFormatId = DateFormatId;
-            model.BillingBatch_vw_Invocie_Template = _repository.GetBillingBatch_vw_Invocie_Template(BillingBatchUID, CompanyID, InvoiceUID, InvoiceType);
-            model.BillingDetailByBillingBatchUIDList = _repository.GetBillingDetailByBillingBatchUID(BillingBatchUID, InvoiceUID, CompanyID);
-            return View(model);
-        }
-
-        #endregion
-    
-    
-    -------------------------Web.config.------------------------------
-    
-     <system.web>
-    <sessionState cookieless="false" timeout="20" />
-    <customErrors mode="Off" />
-    <compilation debug="true" targetFramework="4.5">
-      <assemblies>
-        <add assembly="System.Data.Entity, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089" />
-      </assemblies>
-    </compilation>
-    <httpRuntime targetFramework="4.5" maxUrlLength="12288" maxQueryStringLength="2097100" maxRequestLength="2000000000" executionTimeout="3600" />
-    <authentication mode="Forms">
-      <forms loginUrl="~/Account/Login" timeout="2880" />
-    </authentication>
-    <pages>
-      <namespaces>
-        <add namespace="System.Web.Helpers" />
-        <add namespace="System.Web.Mvc" />
-        <add namespace="System.Web.Mvc.Ajax" />
-        <add namespace="System.Web.Mvc.Html" />
-        <add namespace="System.Web.Optimization" />
-        <add namespace="System.Web.Routing" />
-        <add namespace="System.Web.WebPages" />
-      </namespaces>
-    </pages>
-  </system.web>
-  
-   <system.webServer>
-    <security>
-      <requestFiltering>
-        <requestLimits maxUrl="12288" maxQueryString="2097100" />
-      </requestFiltering>
-    </security>
-    <validation validateIntegratedModeConfiguration="false" />
-    <handlers>
-      <remove name="ExtensionlessUrlHandler-ISAPI-4.0_32bit" />
-      <remove name="ExtensionlessUrlHandler-ISAPI-4.0_64bit" />
-      <remove name="ExtensionlessUrlHandler-Integrated-4.0" />
-      <add name="ExtensionlessUrlHandler-ISAPI-4.0_32bit" path="*." verb="GET,HEAD,POST,DEBUG,PUT,DELETE,PATCH,OPTIONS" modules="IsapiModule" scriptProcessor="%windir%\Microsoft.NET\Framework\v4.0.30319\aspnet_isapi.dll" preCondition="classicMode,runtimeVersionv4.0,bitness32" responseBufferLimit="0" />
-      <add name="ExtensionlessUrlHandler-ISAPI-4.0_64bit" path="*." verb="GET,HEAD,POST,DEBUG,PUT,DELETE,PATCH,OPTIONS" modules="IsapiModule" scriptProcessor="%windir%\Microsoft.NET\Framework64\v4.0.30319\aspnet_isapi.dll" preCondition="classicMode,runtimeVersionv4.0,bitness64" responseBufferLimit="0" />
-      <add name="ExtensionlessUrlHandler-Integrated-4.0" path="*." verb="GET,HEAD,POST,DEBUG,PUT,DELETE,PATCH,OPTIONS" type="System.Web.Handlers.TransferRequestHandler" preCondition="integratedMode,runtimeVersionv4.0" />
-    </handlers>
-  </system.webServer>
